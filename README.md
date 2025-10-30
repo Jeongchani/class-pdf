@@ -61,6 +61,8 @@ put ./자료.pdf
 MIT
 
 ## 업데이트 루틴
+````bash
 cd /srv/class-pdf/app
 git pull origin main
 ./deploy/deploy.sh
+````
