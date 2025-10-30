@@ -59,3 +59,8 @@ put ./자료.pdf
 
 ## 라이선스
 MIT
+
+## 업데이트 루틴
+cd /srv/class-pdf/app
+git pull origin main
+./deploy/deploy.sh
