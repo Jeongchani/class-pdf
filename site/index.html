@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>수업 자료</title>
+  <style>
+    :root{--w:920px}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;margin:0;padding:24px 16px;background:#fff}
+    .wrap{max-width:var(--w);margin:0 auto}
+    h1{font-size:22px;margin:0 0 12px}
+    .muted{color:#666;font-size:12px;margin:4px 0 16px}
+    .tools{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+    input[type="search"]{flex:1;padding:10px 12px;border:1px solid #ddd;border-radius:10px;outline:none}
+    .list{display:grid;grid-template-columns:1fr;gap:8px}
+    a.item{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px;border:1px solid #eee;border-radius:12px;text-decoration:none}
+    a.item:hover{background:#fafafa}
+    .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .date{font-size:12px;color:#666;white-space:nowrap}
+    @media (min-width:720px){ .list{grid-template-columns:1fr 1fr} }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>수업 자료</h1>
+  <p class="muted">PDF를 클릭하면 브라우저에서 바로 열립니다.</p>
+
+  <div class="tools">
+    <input id="q" type="search" placeholder="파일명/날짜 검색 (예: 2025-10-30, NodeJs)" autocomplete="off" />
+    <button id="copy" type="button">현재 목록 링크 복사</button>
+  </div>
+
+  <div id="list" class="list"></div>
+</div>
+
+<script>
+const $q=document.getElementById('q'),$list=document.getElementById('list'),$copy=document.getElementById('copy');
+const state={items:[],q:new URL(location.href).searchParams.get('q')||''}; $q.value=state.q;
+function fmtDate(ts){const d=new Date(ts*1000),mm=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');return `${d.getFullYear()}-${mm}-${dd}`;}
+function render(){
+  const q=state.q.trim().toLowerCase();
+  const items=state.items.filter(it=>!q||it.name.toLowerCase().includes(q)||it.path.toLowerCase().includes(q));
+  $list.innerHTML=items.map(it=>{
+    const href=`/viewer.html?f=${encodeURIComponent(it.path)}`;
+    return `<a class="item" href="${href}"><span class="name">${it.name}</span><span class="date">${fmtDate(it.mtime)}</span></a>`;
+  }).join('') || `<div class="muted">검색 결과 없음</div>`;
+  const u=new URL(location.href); if(q) u.searchParams.set('q',q); else u.searchParams.delete('q'); history.replaceState(null,'',u.toString());
+}
+async function boot(){
+  try{
+    const r=await fetch('/index.json',{cache:'no-store'}); if(!r.ok) throw 0;
+    const data=await r.json(); state.items=data.items.sort((a,b)=>b.mtime-a.mtime); render();
+  }catch(e){
+    $list.innerHTML=`<a class="item" href="/pdfs/"><span class="name">/pdfs/ 목록으로 이동</span><span class="date"></span></a>`;
+  }
+}
+$q.addEventListener('input',e=>{state.q=e.target.value;render();});
+$copy.addEventListener('click',()=>{navigator.clipboard.writeText(location.href).then(()=>{$copy.textContent='복사됨';setTimeout(()=>{$copy.textContent='현재 목록 링크 복사'},1200);});});
+boot();
+</script>
+</body>
+</html>

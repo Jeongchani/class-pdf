@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>관리자 – 수업자료</title>
+<style>
+:root{--w:980px}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;margin:0;background:#fff;color:#111}
+.wrap{max-width:var(--w);margin:0 auto;padding:20px 14px}
+h1{font-size:20px;margin:0 0 12px}
+.muted{color:#666;font-size:12px;margin:6px 0 16px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+input[type="search"],input[type="text"]{padding:10px 12px;border:1px solid #ddd;border-radius:10px;outline:none}
+button{padding:10px 12px;border:1px solid #ddd;border-radius:10px;background:#fafafa;cursor:pointer}
+button:hover{background:#f3f3f3}
+#drop{border:2px dashed #bbb;border-radius:14px;padding:24px;text-align:center;margin:10px 0}
+#drop.drag{border-color:#06f;background:#f5f9ff}
+.grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}
+.card{display:flex;justify-content:space-between;gap:10px;align-items:center;border:1px solid #eee;border-radius:12px;padding:10px}
+.name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{font-size:12px;color:#666;white-space:nowrap}
+.del{color:#c00;border-color:#f2c6c6;background:#fff}
+.del:hover{background:#ffecec}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:10px;opacity:0;transition:opacity .2s}
+.toast.show{opacity:1}
+@media(min-width:760px){.grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>관리자 – 수업자료</h1>
+  <p class="muted">이 페이지는 Basic Auth 뒤에 있습니다. 업로드는 <b>PDF만</b> 허용됩니다.</p>
+
+  <div class="row">
+    <input id="q" type="search" placeholder="검색(파일명/날짜)" style="flex:1;min-width:220px"/>
+    <input id="subdir" type="text" placeholder="서브폴더(예: 2025-10-30)" style="min-width:200px"/>
+    <input id="file" type="file" accept="application/pdf" multiple/>
+    <button id="btnUpload">업로드</button>
+    <button id="btnReload">목록 새로고침</button>
+  </div>
+
+  <div id="drop">여기로 PDF 드래그&드롭 (또는 파일 선택 후 업로드)</div>
+
+  <div id="list" class="grid"></div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const $q = document.getElementById('q');
+const $subdir = document.getElementById('subdir');
+const $file = document.getElementById('file');
+const $btnUpload = document.getElementById('btnUpload');
+const $btnReload = document.getElementById('btnReload');
+const $drop = document.getElementById('drop');
+const $list = document.getElementById('list');
+const $toast = document.getElementById('toast');
+
+const state = { items: [], q: '' };
+
+function toast(msg){ $toast.textContent = msg; $toast.classList.add('show'); setTimeout(()=>{$toast.classList.remove('show')},1300); }
+function today(){ const d=new Date(); const mm=String(d.getMonth()+1).padStart(2,'0'); const dd=String(d.getDate()).padStart(2,'0'); return `${d.getFullYear()}-${mm}-${dd}`; }
+function fmtDate(ts){ const d=new Date(ts*1000),mm=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0'); return `${d.getFullYear()}-${mm}-${dd}`; }
+
+function render(){
+  const q = state.q.trim().toLowerCase();
+  const list = state.items.filter(it => !q || it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q));
+  $list.innerHTML = list.map(it=>{
+    return `<div class="card" data-path="${it.path}">
+      <div class="name">${it.name}</div>
+      <div class="meta">${fmtDate(it.mtime)} <button class="del" data-del="${it.path}">삭제</button></div>
+    </div>`;
+  }).join('') || `<div class="muted">목록이 비었거나 검색 결과 없음</div>`;
+}
+
+async function loadIndex(){
+  try{
+    const r = await fetch('/index.json', {cache:'no-store'});
+    if(!r.ok) throw 0;
+    const data = await r.json();
+    state.items = (data.items||[]).slice().sort((a,b)=>b.mtime-a.mtime);
+    render();
+  }catch(e){
+    state.items = [];
+    render();
+  }
+}
+
+async function uploadFiles(files){
+  if(!files || !files.length) return;
+  const subdir = ($subdir.value || '').trim();
+  for(const f of files){
+    if(!/\.pdf$/i.test(f.name)){ toast('PDF만 업로드 가능합니다'); continue; }
+    const fd = new FormData();
+    fd.append('file', f, f.name);
+    if(subdir) fd.append('subdir', subdir);
+    const res = await fetch('/api/upload', { method:'POST', body: fd });
+    if(!res.ok){ toast('업로드 실패'); continue; }
+    const js = await res.json();
+    const name = (subdir? subdir + '/' : '') + f.name;
+    state.items.unshift({ path: js.path, name, mtime: Math.floor(Date.now()/1000) });
+    render();
+  }
+  toast('업로드 완료');
+}
+
+async function deletePath(path){
+  if(!confirm('삭제할까요?\n'+path)) return;
+  const res = await fetch('/api/delete', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ path })
+  });
+  if(!res.ok){ toast('삭제 실패'); return; }
+  state.items = state.items.filter(it=>it.path !== path);
+  render();
+  toast('삭제 완료');
+}
+
+$q.addEventListener('input', e=>{ state.q = e.target.value; render(); });
+$btnReload.addEventListener('click', loadIndex);
+$btnUpload.addEventListener('click', ()=> uploadFiles($file.files));
+$drop.addEventListener('dragover', e=>{ e.preventDefault(); $drop.classList.add('drag'); });
+$drop.addEventListener('dragleave', ()=> $drop.classList.remove('drag'));
+$drop.addEventListener('drop', e=>{
+  e.preventDefault(); $drop.classList.remove('drag');
+  const files = [...e.dataTransfer.files];
+  uploadFiles(files);
+});
+$list.addEventListener('click', e=>{
+  const path = e.target?.dataset?.del;
+  if(path) deletePath(path);
+});
+
+$subdir.value = today();
+loadIndex();
+</script>
+</body>
+</html>

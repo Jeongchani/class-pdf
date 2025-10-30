@@ -1,0 +1,7 @@
+# 예시 템플릿 (운영: /etc/cloudflared/config.yml)
+tunnel: <UUID>
+credentials-file: /etc/cloudflared/<UUID>.json
+ingress:
+  - hostname: pdf.jeonglab.site
+    service: http://localhost:8080
+  - service: http_status:404

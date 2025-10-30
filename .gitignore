@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+admin/venv/
+
+# Generated
+site/index.json
+
+# Secrets / Local only
+cloudflared/*.json
+cloudflared/cert.pem
+etc/
+*.log
+
+# Uploaded PDFs are not versioned
+pdfs/
